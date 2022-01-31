@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Paradigms Assignment 2</title>
+    <link href="http://fonts.cdnfonts.com/css/common-pixel" rel="stylesheet">
+
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+        }
+
+        body {
+            background-color: black;
+            font-family: 'Common Pixel', sans-serif;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        canvas {
+            background: black;
+            display: block;
+            margin: 0 auto;
+            border-top: 10px white solid;
+            border-bottom: 10px white solid;
+            padding: 0 10px;
+        }
+
+        #container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            font-size: 40px;
+        }
+
+        h2 {
+            margin-top: 20px;
+        }
+
+        h3 {
+            padding: 10px;
+        }
+
+        ul {
+            font-size: 20px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <h1>
+        IRISH PONG
+    </h1>
+    <canvas id="myCanvas" width="480" height="320"></canvas>
+    <h3>
+        Controls:
+    </h3>
+    <ul>
+        <li>R - Restart</li>
+        <li>F - Change ball direction</li>
+    </ul>
+    <h2>
+        Vlad Bobyr
+    </h2>
+</div>
+
+<script>
+    // context
+    let canvas = document.getElementById("myCanvas");
+    let ctx = canvas.getContext("2d");
+
+    // display settings
+    let ballRadius = 6;
+    let paddleHeight = 60;
+    let paddleWidth = 12;
+
+    // movement settings
+    const paddleVelocity = 6.5;
+    const aiPaddleVelocity = 3.2;
+    const maxHorizontalBallSpeed = 8;
+    const minHorizontalBallSpeed = 3;
+    const maxVerticalBallSpeed = 4;
+    const minVerticalBallSpeed = 1;
+    const ballHorizontalAcceleration = .2;
+    const ballVerticalAcceleration = .2;
+
+    // classes
+    class Game {
+        constructor({p1, p2, ball}) {
+            this.p1 = p1;
+            this.p2 = p2;
+            this.ball = ball;
+            this.playerScore = 0;
+            this.aiScore = 0;
+
+            this.started = false;
+            this.pointScored = false;
+        }
+
+        isGameInProgress() {
+            return this.started && !this.pointScored;
+        }
+
+        startGame() {
+            this.started = true;
+        }
+
+        resetGame() {
+            this.playerScore = 0;
+            this.aiScore = 0;
+            this.started = false;
+            this.pointScored = false;
+            this.resetObjects();
+        }
+
+        resetObjects() {
+            this.p1.reset();
+            this.ball.reset();
+            ball.dx = (Math.random() > .5 ? -1 : 1) * (minHorizontalBallSpeed + Math.random());
+            ball.dy = (Math.random() > .5 ? -1 : 1) * (minVerticalBallSpeed + Math.random());
+            this.p2.reset();
+        }
+
+
+        update() {
+            if (inputR) {
+                this.resetGame();
+            }
+            if (inputF) {
+                this.ball.dy = -this.ball.dy;
+                inputF = false;
+            }
+
+            if (!this.started && inputSpace) {
+                this.startGame();
+            }
+
+            if (inputSpace) {
+                if (this.pointScored) {
+                    this.resetObjects();
+                    this.pointScored = false;
+                }
+            }
+
+            if (!this.isGameInProgress()) {
+                return;
+            }
+
+            // check winner
+            if (ball.isAtHorizontalEdge() && !(ball.isTouching(this.p1) || ball.isTouching(this.p2))) {
+                this.pointScored = true;
+                inputUp = false;
+                inputDown = false;
+                if (ball.x > canvas.width / 2) {
+                    this.playerScore += 1;
+                } else {
+                    this.aiScore += 1;
+                }
+            }
+        }
+
+        draw() {
+            if (!this.started) {
+                drawOverlay("black");
+
+                writeText("Irish Pong", canvas.width / 2, canvas.height / 2 - 20, {
+                    color: 'yellow',
+                    size: "50px",
+                });
+                writeText("Press SPACE to begin", canvas.width / 2, canvas.height / 2 + 30, {
+                    color: 'white',
+                    size: "25px",
+                });
+                return;
+            }
+
+            if (this.pointScored) {
+                const winner = ball.x < canvas.width / 2 ? 'Player' : "CPU";
+                writeText(`${winner} scores!`, canvas.width / 2, canvas.height / 2, {
+                    color: 'yellow',
+                    size: "30px",
+                });
+                writeText(`SPACE - continue`, canvas.width / 2, canvas.height / 2 + 40, {
+                    color: 'white',
+                    size: "20px",
+                });
+                writeText(`R - Restart`, canvas.width / 2, canvas.height / 2 + 70, {
+                    color: 'white',
+                    size: "20px",
+                });
+
+            }
+
+            writeText(`${this.playerScore}    ${this.aiScore}`, canvas.width / 2, 40, {color: 'white', size: '35px'});
+        }
+    }
+
+
+    function calculateVelocity({upperBound, position, dimension, desiredVelocity}) {
+        if (desiredVelocity > 0) {
+            const spaceLeft = upperBound - (position + (dimension / 2));
+            return Math.min(spaceLeft, desiredVelocity);
+        } else if (desiredVelocity < 0) {
+            const spaceLeft = position - dimension / 2;
+            return -Math.min(spaceLeft, Math.abs(desiredVelocity));
+        }
+        return 0;
+    }
+
+
+    class PositionedObject {
+        constructor({height, width, x = 0, y = 0, dx = 0, dy = 0}) {
+            this.initialX = x;
+            this.initialY = y;
+            this.x = x;
+            this.y = y;
+            this.dx = dx;
+            this.dy = dy;
+            this.initialDx = dx;
+            this.initialDy = dy;
+            this.height = height;
+            this.width = width;
+        }
+
+        reset() {
+            this.x = this.initialX;
+            this.y = this.initialY;
+            this.dx = this.initialDx;
+            this.dy = this.initialDy;
+        }
+
+
+        isAtVerticalEdge() {
+            return ((this.y + this.height / 2) === canvas.height) || ((this.y - this.height / 2) === 0);
+        }
+
+        isAtHorizontalEdge() {
+            return ((this.x + this.width / 2) === canvas.width) || ((this.x - this.width / 2) === 0);
+        }
+
+        applyVelocity(canvas) {
+            this.x += calculateVelocity({
+                upperBound: canvas.width,
+                position: this.x,
+                dimension: this.width,
+                desiredVelocity: this.dx,
+            });
+            this.y += calculateVelocity({
+                upperBound: canvas.height,
+                position: this.y,
+                dimension: this.height,
+                desiredVelocity: this.dy,
+            });
+        }
+
+        verticalOutOfBounds(ctx) {
+            const nextPosition = this.y + this.dy;
+            if (nextPosition > (ctx.height - (this.height / 2))) {
+                return true;
+            } else if (nextPosition < this.height / 2) {
+                return true;
+            }
+            return false;
+        }
+
+        isTouching(o) {
+            const left0 = o.x - o.width / 2;
+            const top0 = o.y - o.height / 2;
+            const right0 = o.x + o.width / 2;
+            const bottom0 = o.y + o.height / 2;
+
+            const left1 = this.x - this.width / 2;
+            const top1 = this.y - this.height / 2;
+            const right1 = this.x + this.width / 2;
+            const bottom1 = this.y + this.height / 2;
+
+            const horizontalIntersection = (left0 <= left1 && left1 <= right0) || (left1 <= left0 && left0 <= right1);
+            const verticalIntersection = (top0 <= top1 && top1 <= bottom0) || (top1 <= top0 && top0 <= bottom1);
+            return horizontalIntersection && verticalIntersection;
+        }
+    }
+
+
+    // drawing functions
+    function drawField(game) {
+        if (!game.isGameInProgress()) {
+            return;
+        }
+
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 10;
+        ctx.setLineDash([10, 8]);
+
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, 0);
+        ctx.lineTo(canvas.width / 2, canvas.height);
+        ctx.stroke();
+    }
+
+    function drawBall(o, {color = "#0095DD"} = {}) {
+        // ctx.beginPath();
+        // ctx.arc(o.x, o.y, o.height / 2, 0, Math.PI * 2);
+        // ctx.fillStyle = color;
+        // ctx.fill();
+        // ctx.closePath();
+    }
+
+    function drawPaddle(o, {color = "#0095DD"} = {}) {
+        ctx.beginPath();
+        ctx.rect(o.x - o.width / 2, o.y - o.height / 2, o.width, o.height);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    function writeText(text, x, y, {color = 'black', size = "20px"} = {}) {
+        ctx.font = `${size} Common Pixel`;
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.fontWeight = "normal";
+        ctx.fillText(text.toUpperCase(), x, y);
+    }
+
+    function drawOverlay(color) {
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    // movement
+    function movePlayerPaddle(canvas, paddle) {
+        if (inputUp) {
+            paddle.dy = -paddleVelocity;
+        } else if (inputDown) {
+            paddle.dy = paddleVelocity;
+        } else {
+            paddle.dy = 0;
+        }
+        paddle.applyVelocity(canvas);
+    }
+
+    function moveAiPaddle(canvas, paddle, ball) {
+        const distanceFromBall = ball.y - paddle.y;
+        const magnitude = Math.min(Math.abs(distanceFromBall), aiPaddleVelocity);
+        paddle.dy = distanceFromBall > 0 ? magnitude : -magnitude;
+        if (paddle.verticalOutOfBounds(canvas)) {
+            paddle.dy = 0;
+        }
+        paddle.applyVelocity(canvas);
+    }
+
+
+    function moveBall(canvas, ball, playerPaddle, aiPaddle) {
+        if (ball.isAtVerticalEdge()) {
+            ball.dy = -ball.dy;
+        }
+
+
+        const touchingP1 = ball.isTouching(playerPaddle);
+        const touchingP2 = ball.isTouching(aiPaddle);
+        if (ball.isAtHorizontalEdge() || touchingP1 || touchingP2) {
+            const horizontalDirection = ball.x > canvas.width / 2 ? -1 : 1;
+            const horizontalMagnitude = Math.min(Math.abs(ball.dx) + ballHorizontalAcceleration, maxHorizontalBallSpeed);
+            ball.dx = horizontalDirection * horizontalMagnitude;
+
+            const verticalDirection = ball.dy > 0 ? 1 : -1;
+            const verticalMagnitude = Math.min(Math.abs(ball.dy) + ballVerticalAcceleration, maxVerticalBallSpeed);
+            ball.dy = verticalDirection * verticalMagnitude;
+        }
+
+        ball.applyVelocity(canvas);
+    }
+
+    // objects
+    const playerPaddle = new PositionedObject({
+        x: canvas.width - paddleWidth / 2,
+        y: (canvas.height / 2) - paddleWidth,
+        height: paddleHeight,
+        width: paddleWidth,
+    });
+
+    const aiPaddle = new PositionedObject({
+        x: paddleWidth / 2,
+        y: canvas.height / 2,
+        height: paddleHeight,
+        width: paddleWidth,
+    });
+
+    const ball = new PositionedObject({
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        height: ballRadius * 2,
+        width: ballRadius * 2,
+        dx: -minHorizontalBallSpeed,
+        dy: minVerticalBallSpeed,
+    });
+
+
+    const game = new Game({p1: playerPaddle, p2: aiPaddle, ball});
+
+    // paddle movements
+    let inputUp = false;
+    let inputDown = false;
+    let inputSpace = false;
+    let inputR = false;
+    let inputF = false;
+
+    // listeners
+    function keyDownHandler(e) {
+        if (e.key === "Up" || e.key === "ArrowUp") {
+            inputUp = true;
+        } else if (e.key === "Down" || e.key === "ArrowDown") {
+            inputDown = true;
+        } else if (e.key === "Spacebar" || e.key === ' ') {
+            inputSpace = true;
+        } else if (e.key === "R" || e.key === 'r') {
+            inputR = true;
+        } else if (e.key === "F" || e.key === 'f') {
+            inputF = true;
+        }
+    }
+
+    function keyUpHandler(e) {
+        if (e.key === "Up" || e.key === "ArrowUp") {
+            inputUp = false;
+        } else if (e.key === "Down" || e.key === "ArrowDown") {
+            inputDown = false;
+        } else if (e.key === "Spacebar" || e.key === ' ') {
+            inputSpace = false;
+        } else if (e.key === "R" || e.key === 'r') {
+            inputR = false;
+        } else if (e.key === "F" || e.key === 'f') {
+            inputF = false;
+        }
+    }
+
+    document.addEventListener("keydown", keyDownHandler, false);
+    document.addEventListener("keyup", keyUpHandler, false);
+
+
+    function tick() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (game.isGameInProgress()) {
+            movePlayerPaddle(canvas, playerPaddle);
+            moveAiPaddle(canvas, aiPaddle, ball);
+            moveBall(canvas, ball, playerPaddle, aiPaddle);
+        }
+
+        drawField(game);
+        drawPaddle(playerPaddle, {color: 'white'});
+        drawPaddle(aiPaddle, {color: 'white'});
+        drawPaddle(ball, {color: 'yellow'});
+
+        game.update();
+        game.draw();
+    }
+
+
+    tick();
+    game.resetGame();
+    setInterval(tick, 10);
+
+    function runTests() {
+        function assert(condition, message = 'Assertion failed') {
+            if (!condition) {
+                throw new Error(message);
+            }
+        }
+
+        function testObjects() {
+            const o1 = new PositionedObject({width: 10, height: 10, x: 0, y: 0});
+            const o2 = new PositionedObject({width: 2, height: 2, x: 0, y: 0});
+
+            // touching
+            // - o2 inside o1
+            assert(o1.isTouching(o2));
+            assert(o2.isTouching(o1));
+
+            // - overlapping
+            o2.x = 5;
+            o2.y = 5;
+            assert(o1.isTouching(o2));
+            assert(o2.isTouching(o1));
+
+            // - not touching
+            o2.x = 15;
+            o2.y = 15;
+            assert(!o1.isTouching(o2));
+            assert(!o2.isTouching(o1));
+
+            // - next to each-other counts as touching
+            o2.x = 5;
+            o2.y = 5;
+            o1.x = 11;
+            o1.y = 5;
+            assert(o1.isTouching(o2));
+            assert(o2.isTouching(o1));
+
+            // velocity
+            const o3 = new PositionedObject({x: 0, y: 0, dx: 0, dy: 0, height: 2, width: 2});
+            o3.applyVelocity(canvas);
+            assert(o3.x === 0);
+            assert(o3.y === 0);
+
+            o3.dx = 1;
+            o3.dy = 2;
+            o3.applyVelocity(canvas);
+            o3.applyVelocity(canvas);
+            assert(o3.x === 2);
+            assert(o3.y === 4);
+
+
+            o3.x = 2;
+            o3.y = 2;
+            o3.dx = -10;
+            o3.dy = 2;
+            o3.applyVelocity(canvas);
+            assert(o3.x === 1);
+            assert(o3.y === 4);
+
+            assert(o3.isAtHorizontalEdge());
+            assert(!o3.isAtVerticalEdge());
+        }
+
+        console.log("Running tests:");
+        try {
+            testObjects();
+            console.log("ALL TESTS PASSED");
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    runTests();
+</script>
+</body>
+</html>
